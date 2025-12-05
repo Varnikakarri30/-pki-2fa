@@ -2,15 +2,20 @@
 import os
 from datetime import datetime, timezone
 
-# Try the plain module name first because files are in /app as modules (not a package)
+# Try plain module import first, then package-style import as fallback,
+# but do NOT print intermediate tracebacks (silent fallback).
+generate_totp = None
 try:
-    from totp_utils import generate_totp
+    from totp_utils import generate_totp  # preferred
 except Exception:
-    # Defensive fallback to package-style import if handler expects that
     try:
-        from app.totp_utils import generate_totp
+        from app.totp_utils import generate_totp  # fallback
     except Exception:
-        raise
+        generate_totp = None
+
+if generate_totp is None:
+    # If both imports failed, raise a concise error (no long traceback)
+    raise ImportError("Could not import TOTP generator (totp_utils or app.totp_utils)")
 
 DATA_FILE = "/data/seed.txt"
 OUT_FILE = "/cron/last_code.txt"
@@ -18,6 +23,7 @@ OUT_FILE = "/cron/last_code.txt"
 def main():
     try:
         if not os.path.exists(DATA_FILE):
+            # Keep the log small and explicit
             print("Seed file not found", flush=True)
             return
         hex_seed = open(DATA_FILE, "r").read().strip()
@@ -28,8 +34,9 @@ def main():
         with open(OUT_FILE, "a") as f:
             f.write(line)
     except Exception:
-        import traceback
-        traceback.print_exc()
+        # Print a short message to stderr (no traceback)
+        import sys
+        print("Cron job failed: " + str(sys.exc_info()[1]), file=sys.stderr)
 
 if __name__ == "__main__":
     main()
